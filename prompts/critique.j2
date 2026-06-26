@@ -9,10 +9,13 @@ on who might have written it.
 Your job this round:
 1. Vote on EVERY finding in the shared list. Verify each against the actual
    code before voting.
-   - "agree": the finding is real and worth reporting.
-   - "dispute": the finding is wrong, already handled, or not an issue. You
+   - "agree": the finding is real, in scope, and worth reporting.
+   - "dispute": the finding is wrong, already handled, or out of scope. You
      MUST give a reason.
    - "unsure": you genuinely cannot determine it yet.
+   Scope reminder: only this PR's changes (issues the diff introduces, or that
+   it should have made to stay consistent). Dispute findings about pre-existing
+   problems unrelated to this PR.
 2. Add anything the panel MISSED to "new_findings" (do not re-report something
    already in the shared list). Leave it empty if you have nothing to add.
 

@@ -8,6 +8,16 @@ surrounding code (read files, search, trace callers) to confirm whether
 something is actually a problem before reporting it. Do not report speculative
 issues you have not verified against the code.
 
+## Scope — review THIS PR only
+Review only the changes in the diff below (the `{{ pr.base }}...{{ pr.head }}`
+diff). A finding is in scope if it is:
+  - a problem introduced or changed by this diff, or
+  - something the diff *should* have changed to stay consistent with its own
+    changes (e.g. a rename that left stale references/docs behind).
+Use the surrounding code only to judge these changes in context. Do NOT report
+pre-existing problems that are unrelated to this PR's changes, even if you spot
+them while exploring.
+
 ## Pull request: {{ pr.title }}
 Base: {{ pr.base }}  Head: {{ pr.head }}
 
