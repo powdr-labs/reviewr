@@ -164,7 +164,10 @@ def publish(run, pr_override, event, dry_run) -> None:
               help="PR URL/owner-repo#n, if the run doesn't record it.")
 @click.option("--dry-run", is_flag=True,
               help="Produce the fix but don't commit/push/open a PR.")
-def fix(run, config_path, repo_dir, clone_dir, pr_override, dry_run) -> None:
+@click.option("--from-saved", is_flag=True,
+              help="Skip the AIs; apply this run's saved fix/final.patch and "
+                   "open the PR.")
+def fix(run, config_path, repo_dir, clone_dir, pr_override, dry_run, from_saved):
     """Fix an agreed review: AIs propose patches, reach consensus, and a PR is
     opened targeting the reviewed PR.
 
@@ -186,12 +189,17 @@ def fix(run, config_path, repo_dir, clone_dir, pr_override, dry_run) -> None:
     click.echo(f"Target PR: {pr['owner']}/{pr['repo']}#{pr['number']} "
                f"(base branch for the fix PR: {pr['head']})")
     click.echo(f"Findings to fix: {len(bundle.findings)}")
-    click.echo(f"Proposers: {', '.join(r.name for r in config.reviewers)}  "
-               f"Decider: {config.fix.decider}\n")
-
-    result = asyncio.run(fix_mod.run_fix(
-        config, pr, bundle.findings, run_dir, repo_dir, clone_dir, log=click.echo
-    ))
+    if from_saved:
+        click.echo("Mode: applying saved fix/final.patch (no AI run)\n")
+        result = fix_mod.apply_saved(
+            config, pr, run_dir, repo_dir, clone_dir, log=click.echo
+        )
+    else:
+        click.echo(f"Proposers: {', '.join(r.name for r in config.reviewers)}  "
+                   f"Decider: {config.fix.decider}\n")
+        result = asyncio.run(fix_mod.run_fix(
+            config, pr, bundle.findings, run_dir, repo_dir, clone_dir, log=click.echo
+        ))
     ws = result["workspace"]
     try:
         patch = result["final_patch"]

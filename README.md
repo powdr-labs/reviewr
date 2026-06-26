@@ -133,10 +133,16 @@ committed to a branch and opened as a PR **targeting the reviewed PR's head
 branch**.
 
 ```bash
-reviewr fix                 # fix the latest run
+reviewr fix                 # fix the latest run (runs the AIs, then opens the PR)
 reviewr fix --dry-run       # produce the fix and print the patch; don't push/open
 reviewr fix .reviewr/runs/<ts> --repo ~/src/powdr   # branch from a local checkout
+reviewr fix --from-saved    # skip the AIs; push the already-computed fix/final.patch
 ```
+
+A normal `reviewr fix` runs the whole AI pipeline and then opens the PR. If you
+already produced a fix (e.g. via `--dry-run`) and just want to ship it, add
+`--from-saved`: it applies that run's `fix/final.patch` onto the branch and
+opens the PR without re-running the AIs.
 
 Like `review`, it uses your local checkout (`--repo`) or clones the repo
 (cached under `--clone-dir`). The fix branch is `reviewr/fix-pr<N>` (configurable

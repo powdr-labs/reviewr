@@ -222,6 +222,49 @@ def _save_patches(fix_dir: Path, patches: dict[str, str], rnd: int) -> None:
         (fix_dir / f"{name}-r{rnd}.patch").write_text(patch)
 
 
+def apply_saved(
+    config: Config, pr: dict, run_dir: Path,
+    repo_dir: str | None, clone_dir: str, log=print,
+) -> dict:
+    """Skip the AI pipeline: apply a previously computed fix/final.patch onto a
+    fresh branch worktree, ready to commit/push. Returns the same shape as
+    run_fix."""
+    # Absolute: git apply runs with cwd set to the worktree, not here.
+    patch_file = (run_dir / "fix" / "final.patch").resolve()
+    if not patch_file.exists():
+        raise FileNotFoundError(
+            f"no saved fix at {patch_file} — run `reviewr fix` (without "
+            "--from-saved) first, or with --dry-run"
+        )
+    patch = patch_file.read_text()
+    if not patch.strip():
+        raise ValueError("saved final.patch is empty; nothing to apply")
+
+    ws = prepare_workspace(pr, repo_dir, clone_dir, log=log)
+    try:
+        branch = f"{config.fix.branch_prefix}{pr['number']}"
+        wt = add_worktree(ws, "apply", config.worktree.link, branch=branch, log=log)
+        res = subprocess.run(
+            ["git", "apply", "--whitespace=nowarn", str(patch_file)],
+            cwd=wt, capture_output=True, text=True,
+        )
+        if res.returncode != 0:
+            res = subprocess.run(  # fall back to a 3-way merge
+                ["git", "apply", "--3way", str(patch_file)],
+                cwd=wt, capture_output=True, text=True,
+            )
+            if res.returncode != 0:
+                raise RuntimeError(f"git apply failed:\n{res.stderr.strip()}")
+        log(f"Applied saved final.patch ({len(patch.splitlines())} lines) on {branch}")
+        return {
+            "workspace": ws, "branch": branch, "decide_wt": wt,
+            "final_patch": patch, "candidate_patches": {},
+        }
+    except BaseException:
+        ws.cleanup()
+        raise
+
+
 # --- committing, pushing, opening the PR ---------------------------------
 
 def open_fix_pr(
