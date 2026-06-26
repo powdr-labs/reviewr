@@ -65,7 +65,9 @@ def review(ref, config_path, repo_dir, clone_dir, base, head, diff_file, run_dir
     elif ref:
         pref = pr_mod.parse_pr_ref(ref)
         if repo_dir:
-            prepared = pr_mod.prepare_from_local(repo_dir, pref.number, log=logger)
+            prepared = pr_mod.prepare_from_local(
+                repo_dir, pref.number, link=config.worktree.link, log=logger
+            )
         elif pref.slug:
             prepared = pr_mod.prepare_from_clone(
                 pref, clone_dir, pref.number, log=logger

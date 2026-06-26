@@ -12,6 +12,7 @@ Plus the non-PR modes: a local `git diff` range, or a raw diff file.
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -124,7 +125,32 @@ def _github_context(number: int, repo_dir: str, gh_repo: str | None) -> PRContex
 
 # --- the two PR preparation strategies -----------------------------------
 
-def prepare_from_local(repo_dir: str, number: int, log=print) -> PreparedPR:
+def _link_artifacts(repo_dir: str, wt: str, link: list[str], log=print) -> None:
+    """Symlink cached build-artifact dirs from the checkout into the worktree.
+
+    Lets reviewers reuse compiled output (e.g. Lean/MathLib `.lake`, Rust
+    `target`) instead of recompiling from scratch in the fresh worktree. Writes
+    go to the shared target dir — acceptable for incremental build caches.
+    """
+    for rel in link:
+        rel = os.path.normpath(rel)
+        if rel.startswith("..") or os.path.isabs(rel):
+            log(f"  skip link {rel!r}: must be a path inside the repo")
+            continue
+        src = Path(repo_dir) / rel
+        dst = Path(wt) / rel
+        if not src.exists():
+            continue
+        if dst.exists() or dst.is_symlink():
+            continue  # tracked in the PR or already linked — leave it
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        dst.symlink_to(src, target_is_directory=src.is_dir())
+        log(f"  linked {rel} -> {src}")
+
+
+def prepare_from_local(
+    repo_dir: str, number: int, link: list[str] | None = None, log=print
+) -> PreparedPR:
     """Use an existing checkout; inspect the PR via an ephemeral worktree."""
     repo_dir = str(Path(repo_dir).resolve())
     if not (Path(repo_dir) / ".git").exists():
@@ -137,6 +163,9 @@ def prepare_from_local(repo_dir: str, number: int, log=print) -> PreparedPR:
     wt = tempfile.mkdtemp(prefix=f"reviewr-pr{number}-")
     _run(["git", "worktree", "add", "--detach", wt, "FETCH_HEAD"], cwd=repo_dir)
     pr.repo_dir = wt
+
+    if link:
+        _link_artifacts(repo_dir, wt, link, log=log)
 
     def cleanup() -> None:
         subprocess.run(

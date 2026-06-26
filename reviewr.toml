@@ -33,3 +33,12 @@ drop_rejected = true   # stop carrying findings the panel votes down
 
 [composer]
 reviewer = "codex"    # who edits the final REVIEW.md; omit for deterministic render
+
+[worktree]
+# In --repo mode the PR is checked out into a throwaway git worktree, which
+# starts with no build artifacts — so a reviewer that runs a build (e.g. `lake
+# build`) would recompile everything (MathLib!) from scratch. These paths,
+# relative to the repo root, are symlinked from your local checkout into the
+# worktree so cached artifacts are reused. Missing paths are skipped. Note:
+# builds in the worktree then write through to your checkout's caches.
+link = [".lake", "lake-packages", "target", "node_modules"]

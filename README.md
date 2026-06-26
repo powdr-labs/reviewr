@@ -83,6 +83,14 @@ A `REF` may be a PR URL, an `owner/repo#123` spec, or a bare number (bare
 number requires `--repo` to know which repo). Auto-clones are cached under
 `~/.cache/reviewr/clones` (override with `--clone-dir`), so re-runs just fetch.
 
+Reviewers may build the project to verify findings. The throwaway worktree
+starts with no build artifacts, so in `--repo` mode the cached artifact dirs
+listed in `[worktree].link` (`.lake`, `target`, …) are **symlinked** from your
+checkout into the worktree — otherwise a `lake build` would recompile MathLib
+from scratch every run. Builds in the worktree therefore write through to your
+checkout's caches (fine for incremental build output). Auto-clone mode doesn't
+need this: the clone is cached and keeps its own artifacts.
+
 Artifacts land in `./.reviewr/runs/<timestamp>/` — in your current directory,
 never inside the ephemeral worktree/clone. Each run writes: per-round reviewer
 outputs and raw CLI logs, `state-*.json` (the evolving findings + votes),
@@ -137,6 +145,9 @@ Per-reviewer fields:
 `[consensus]`: `max_rounds` (cap on debate rounds) and `drop_rejected` (stop
 carrying findings the panel votes down). `[composer]`: `reviewer` names who
 edits the final `REVIEW.md`; omit it for a deterministic, no-AI render.
+`[worktree].link`: artifact dirs (relative to the repo root) to symlink from
+your checkout into the worktree so reviewers reuse compiled output instead of
+rebuilding (see Use, above).
 
 The schema handed to the CLIs is generated strict (every object gets
 `additionalProperties: false` and all keys `required`) so it satisfies OpenAI /

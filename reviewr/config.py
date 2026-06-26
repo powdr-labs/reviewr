@@ -55,11 +55,25 @@ class ComposerConfig:
     reviewer: str | None = None
 
 
+# Build-artifact dirs worth reusing across branches; symlinked into the
+# worktree so reviewers don't recompile (e.g. Lean/MathLib) from scratch.
+DEFAULT_LINK_PATHS = [".lake", "lake-packages", "target", "node_modules"]
+
+
+@dataclass
+class WorktreeConfig:
+    # Paths (relative to the repo root) symlinked from the local checkout into
+    # the throwaway worktree, so cached build artifacts are reused. Only used in
+    # --repo (local worktree) mode. Missing paths are silently skipped.
+    link: list[str] = field(default_factory=lambda: list(DEFAULT_LINK_PATHS))
+
+
 @dataclass
 class Config:
     reviewers: list[ReviewerConfig]
     consensus: ConsensusConfig
     composer: ComposerConfig
+    worktree: WorktreeConfig
 
     def reviewer(self, name: str) -> ReviewerConfig | None:
         return next((r for r in self.reviewers if r.name == name), None)
@@ -102,4 +116,14 @@ def load_config(path: str | Path) -> Config:
     comp = data.get("composer", {})
     composer = ComposerConfig(reviewer=comp.get("reviewer"))
 
-    return Config(reviewers=reviewers, consensus=consensus, composer=composer)
+    wt = data.get("worktree", {})
+    worktree = WorktreeConfig(
+        link=list(wt.get("link", DEFAULT_LINK_PATHS)),
+    )
+
+    return Config(
+        reviewers=reviewers,
+        consensus=consensus,
+        composer=composer,
+        worktree=worktree,
+    )

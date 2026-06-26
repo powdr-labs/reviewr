@@ -33,7 +33,10 @@ logs, `state-*.json`, `REVIEW.md`).
 
 Reviewers run against a working tree resolved by `reviewr/pr.py`:
 - `--repo` + PR number → an ephemeral `git worktree` at the PR head (the user's
-  branch is never mutated; cleaned up after the run).
+  branch is never mutated; cleaned up after the run). Cached build-artifact dirs
+  from `[worktree].link` (`.lake`, `target`, …) are symlinked in so reviewers
+  reuse compiled output instead of rebuilding (e.g. MathLib). Teardown via
+  `git worktree remove --force` only unlinks the symlinks; the targets are safe.
 - PR URL, no `--repo` → a cached clone under `~/.cache/reviewr/clones`, checked
   out at the PR head.
 
