@@ -64,6 +64,8 @@ class Bundle:
     rounds_run: int
     converged: bool
     findings: list[dict]
+    summary: str
+    verdict: str
     review_markdown: str
     log: str
     run_dir: Path
@@ -123,6 +125,8 @@ def load_bundle(run_dir: Path, pr_override: str | None) -> Bundle:
     # reconstruct path puts them at top level.
     review = data.get("review") or {}
     findings = review.get("findings", data.get("findings", []))
+    summary = review.get("summary", "")
+    verdict = review.get("verdict", "")
 
     pr = dict(data.get("pr") or {})
     if pr_override:
@@ -143,6 +147,8 @@ def load_bundle(run_dir: Path, pr_override: str | None) -> Bundle:
         rounds_run=data.get("rounds_run", 0),
         converged=data.get("converged", False),
         findings=findings,
+        summary=summary,
+        verdict=verdict,
         review_markdown=data.get("review_markdown", ""),
         log=data.get("log", ""),
         run_dir=run_dir,
@@ -228,7 +234,10 @@ def build_payload(b: Bundle, diff_text: str, event: str) -> dict:
     return {"body": body, "event": event, "comments": inline}
 
 
-def _summary_body(b: Bundle, n_inline: int, orphans: list[dict]) -> str:
+def _summary_body(b: Bundle, n_inline: int, orphans: list[tuple[dict, dict]]) -> str:
+    """The main review body. Kept succinct: the per-finding detail lives in the
+    inline comments, so we only carry the overall summary, verdict, the handful
+    of findings that couldn't be anchored, and the run log."""
     ais = ", ".join(b.reviewers) or "multiple AIs"
     conv = "reached consensus" if b.converged else "stopped at the round cap"
     rounds = b.rounds_run
@@ -237,15 +246,20 @@ def _summary_body(b: Bundle, n_inline: int, orphans: list[dict]) -> str:
         "",
         f"Independent reviews by **{ais}**, then blind cross-review over "
         f"**{rounds} round{'s' if rounds != 1 else ''}** ({conv}). "
-        f"{len(b.findings)} agreed finding(s); {n_inline} posted inline.",
+        f"{len(b.findings)} agreed finding(s); {n_inline} posted inline below.",
         "",
-        "---",
-        "",
-        b.review_markdown.strip(),
     ]
+    # Overall assessment — prefer the structured summary; for old runs without
+    # one, fall back to the composed markdown so the body isn't empty.
+    if b.summary.strip():
+        lines += [b.summary.strip(), ""]
+    elif not (b.summary or b.verdict) and b.review_markdown.strip():
+        lines += [b.review_markdown.strip(), ""]
+    if b.verdict.strip():
+        lines += [f"**Verdict:** {b.verdict.strip()}", ""]
+
     if orphans:
-        lines += ["", "---", "",
-                  "### Findings not on changed lines",
+        lines += ["### Findings not on changed lines",
                   "_(couldn't be anchored to the diff)_", ""]
         for f, loc in orphans:
             where = loc.get("file", "")
@@ -253,10 +267,11 @@ def _summary_body(b: Bundle, n_inline: int, orphans: list[dict]) -> str:
                 where += f":{loc['line']}"
             lines.append(
                 f"- **{f.get('severity','').upper()}** `{where}` — "
-                f"{f.get('title','')}"
+                f"{f.get('title','')}: {f.get('description','')}"
             )
+        lines.append("")
     if b.log:
-        lines += ["", "<details><summary>Run log</summary>", "",
+        lines += ["<details><summary>Run log</summary>", "",
                   "```", b.log.strip(), "```", "", "</details>"]
     return "\n".join(lines)
 
