@@ -34,19 +34,33 @@ fetching.
 
 ## Use
 
+Run `reviewr` from anywhere. You either point it at a local checkout, or hand
+it a PR URL and it clones the repo itself for inspection.
+
 ```bash
-# Review a GitHub PR (uses `gh` in the repo)
-reviewr review 1234 --repo /path/to/repo
+# Just a PR URL — reviewr clones the repo (cached) and checks out the PR head
+reviewr review https://github.com/powdr-labs/powdr/pull/123
 
-# Review a local branch diff
-reviewr review --base main --head HEAD --repo /path/to/repo
+# You already have a checkout — pass it + the PR number. Your branch is NOT
+# touched: the PR head is inspected via a throwaway git worktree.
+reviewr review 123 --repo ~/src/powdr
+reviewr review powdr-labs/powdr#123 --repo ~/src/powdr
 
-# Review a raw diff file
-reviewr review --diff-file changes.diff --repo /path/to/repo
+# Local branch diff (no PR)
+reviewr review --base main --head HEAD --repo ~/src/powdr
+
+# Raw diff file
+reviewr review --diff-file changes.diff --repo ~/src/powdr
 ```
 
+A `REF` may be a PR URL, an `owner/repo#123` spec, or a bare number (bare
+number requires `--repo` to know which repo). Auto-clones are cached under
+`~/.cache/reviewr/clones` (override with `--clone-dir`), so re-runs just fetch.
+
 Artifacts (per-round outputs, raw CLI logs, `state-*.json`, and the final
-`REVIEW.md`) land in `.reviewr/runs/<timestamp>/`.
+`REVIEW.md`) land in `./.reviewr/runs/<timestamp>/` — in your current
+directory, never inside the ephemeral worktree/clone. Point `--config` at your
+`reviewr.toml` if it isn't in the cwd.
 
 ## Configure
 

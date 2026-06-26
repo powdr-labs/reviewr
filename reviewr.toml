@@ -31,4 +31,4 @@ max_rounds = 4
 drop_rejected = true   # stop carrying findings the panel votes down
 
 [composer]
-reviewer = "claude"    # who edits the final REVIEW.md; omit for deterministic render
+reviewer = "codex"    # who edits the final REVIEW.md; omit for deterministic render

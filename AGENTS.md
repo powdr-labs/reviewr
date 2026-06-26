@@ -22,13 +22,20 @@ authenticated for live runs.
 ## Run
 
 ```bash
-reviewr review <PR#> --repo /path/to/repo      # GitHub PR
-reviewr review --base main --head HEAD          # local diff
-reviewr review --diff-file changes.diff         # raw diff
+reviewr review https://github.com/owner/repo/pull/123   # URL -> auto-clone
+reviewr review 123 --repo /path/to/repo                 # local checkout
+reviewr review --base main --head HEAD --repo /path     # local diff
+reviewr review --diff-file changes.diff --repo /path    # raw diff
 ```
 
-Artifacts land in `.reviewr/runs/<timestamp>/` (per-round outputs, raw CLI
+Artifacts land in `./.reviewr/runs/<timestamp>/` (per-round outputs, raw CLI
 logs, `state-*.json`, `REVIEW.md`).
+
+Reviewers run against a working tree resolved by `reviewr/pr.py`:
+- `--repo` + PR number → an ephemeral `git worktree` at the PR head (the user's
+  branch is never mutated; cleaned up after the run).
+- PR URL, no `--repo` → a cached clone under `~/.cache/reviewr/clones`, checked
+  out at the PR head.
 
 ## Architecture (where things live)
 
