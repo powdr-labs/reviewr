@@ -46,7 +46,13 @@ def _pr_slug(pr) -> str | None:
 @click.option("--head", default="HEAD", help="Local mode: head ref.")
 @click.option("--diff-file", help="Review a diff from a file instead of a PR.")
 @click.option("--run-dir", help="Artifact dir (default ./.reviewr/runs/<ts>).")
-def review(ref, config_path, repo_dir, clone_dir, base, head, diff_file, run_dir):
+@click.option("--publish", "publish_after", is_flag=True,
+              help="Post the review to the PR as soon as the run finishes.")
+@click.option("--event", "publish_event",
+              type=click.Choice(["COMMENT", "APPROVE", "REQUEST_CHANGES"]),
+              default="COMMENT", help="Review event when --publish (default COMMENT).")
+def review(ref, config_path, repo_dir, clone_dir, base, head, diff_file, run_dir,
+           publish_after, publish_event):
     """Review a PR or a local diff.
 
     REF may be a PR URL (https://github.com/owner/repo/pull/123), an
@@ -114,6 +120,17 @@ def review(ref, config_path, repo_dir, clone_dir, base, head, diff_file, run_dir
 
     click.echo("\n" + "=" * 60)
     click.echo(review_md)
+
+    if publish_after:
+        if not (pr.owner and pr.repo and pr.number):
+            click.echo("\n--publish skipped: this run isn't a GitHub PR review.")
+        else:
+            click.echo("\nPublishing review to the PR…")
+            bundle = publish_mod.load_bundle(rdir, None)
+            diff_text = (rdir / "pr.diff").read_text()
+            payload = publish_mod.build_payload(bundle, diff_text, publish_event)
+            result = publish_mod.post_review(bundle, payload)
+            click.echo(f"Posted review: {result.get('html_url', '(submitted)')}")
 
 
 @main.command()

@@ -77,7 +77,14 @@ reviewr review --base main --head HEAD --repo ~/src/powdr
 
 # Raw diff file
 reviewr review --diff-file changes.diff --repo ~/src/powdr
+
+# Review and post it to the PR in one go
+reviewr review https://github.com/powdr-labs/powdr/pull/123 --publish
 ```
+
+Add `--publish` to post the review to the PR as soon as the run finishes (same
+as running `reviewr publish` afterwards); `--event` sets the review event
+(default `COMMENT`). It's skipped for non-PR reviews (local diff / diff file).
 
 A `REF` may be a PR URL, an `owner/repo#123` spec, or a bare number (bare
 number requires `--repo` to know which repo). Auto-clones are cached under
