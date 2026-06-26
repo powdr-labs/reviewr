@@ -1,0 +1,34 @@
+# reviewr configuration.
+#
+# Each [[reviewers]] is an AI CLI invoked headlessly. The prompt is piped to
+# stdin; the structured result is read back per `result_from`. Reviewers run
+# inside the target repo so they can explore the code, not just the diff.
+
+[[reviewers]]
+name = "claude"
+# --output-format json wraps the answer in a JSON envelope (.result);
+# --json-schema constrains that answer to our findings schema;
+# --dangerously-skip-permissions lets it read/search the repo non-interactively.
+command = ["claude", "-p", "--output-format", "json", "--dangerously-skip-permissions"]
+prompt_via = "stdin"
+result_from = "claude_json"
+schema_arg = "--json-schema"
+timeout = 900
+
+[[reviewers]]
+name = "codex"
+# codex exec reads the prompt from stdin; --output-schema constrains the final
+# message; -o writes that final message to a file we read back.
+command = ["codex", "exec", "--sandbox", "read-only", "--skip-git-repo-check"]
+prompt_via = "stdin"
+result_from = "last_message_file"
+schema_arg = "--output-schema"
+last_message_arg = "-o"
+timeout = 900
+
+[consensus]
+max_rounds = 4
+drop_rejected = true   # stop carrying findings the panel votes down
+
+[composer]
+reviewer = "claude"    # who edits the final REVIEW.md; omit for deterministic render
