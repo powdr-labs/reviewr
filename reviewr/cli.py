@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -21,6 +22,15 @@ DEFAULT_CLONE_DIR = "~/.cache/reviewr/clones"
 @click.version_option()
 def main() -> None:
     """Multi-AI consensus code reviewer."""
+
+
+def _pr_slug(pr) -> str | None:
+    """A filesystem-safe run-dir prefix identifying the PR, e.g.
+    'powdr-labs-evm-semantics-pr27'."""
+    if pr.owner and pr.repo and pr.number:
+        return re.sub(r"[^A-Za-z0-9._-]", "_",
+                      f"{pr.owner}-{pr.repo}-pr{pr.number}")
+    return None
 
 
 @main.command()
@@ -87,7 +97,9 @@ def review(ref, config_path, repo_dir, clone_dir, base, head, diff_file, run_dir
         rdir = Path(run_dir)
     else:
         ts = datetime.now().strftime("%Y%m%d-%H%M%S")
-        rdir = Path.cwd() / ".reviewr" / "runs" / ts
+        slug = _pr_slug(pr)
+        name = f"{slug}-{ts}" if slug else ts
+        rdir = Path.cwd() / ".reviewr" / "runs" / name
 
     logger(f"Reviewing: {pr.short()}")
     logger(f"Inspecting code in: {pr.repo_dir}")
@@ -118,7 +130,7 @@ def publish(run, pr_override, event, dry_run) -> None:
     RUN is a run directory, a review.json, or a REVIEW.md. Defaults to the
     latest run under ./.reviewr/runs.
     """
-    run_dir = publish_mod.resolve_run_dir(run, Path.cwd())
+    run_dir = publish_mod.resolve_run_dir(run, Path.cwd(), pr_override)
     bundle = publish_mod.load_bundle(run_dir, pr_override)
 
     diff_path = run_dir / "pr.diff"
@@ -174,7 +186,7 @@ def fix(run, config_path, repo_dir, clone_dir, pr_override, dry_run, from_saved)
     RUN is a run dir, review.json, or REVIEW.md (defaults to the latest run).
     """
     config = load_config(config_path)
-    run_dir = publish_mod.resolve_run_dir(run, Path.cwd())
+    run_dir = publish_mod.resolve_run_dir(run, Path.cwd(), pr_override)
     bundle = publish_mod.load_bundle(run_dir, pr_override)
     pr = bundle.pr
     if not pr.get("head"):

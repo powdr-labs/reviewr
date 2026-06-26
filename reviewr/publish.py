@@ -24,22 +24,64 @@ from .pr import parse_pr_ref
 
 # --- locating the run ----------------------------------------------------
 
-def find_latest_run(base: Path) -> Path | None:
+def _run_dirs(base: Path) -> list[Path]:
     runs = base / ".reviewr" / "runs"
     if not runs.is_dir():
-        return None
-    candidates = sorted(
+        return []
+    # newest first, by mtime (robust to PR-slug-prefixed dir names)
+    return sorted(
         (d for d in runs.iterdir() if d.is_dir()),
-        key=lambda d: d.name,
+        key=lambda d: d.stat().st_mtime,
         reverse=True,
     )
-    for d in candidates:
+
+
+def find_latest_run(base: Path) -> Path | None:
+    for d in _run_dirs(base):
         if (d / "review.json").exists() or (d / "REVIEW.md").exists():
             return d
     return None
 
 
-def resolve_run_dir(arg: str | None, cwd: Path) -> Path:
+def _run_matches_pr(d: Path, ref) -> bool:
+    rj = d / "review.json"
+    if rj.exists():
+        try:
+            pr = json.loads(rj.read_text()).get("pr") or {}
+        except (json.JSONDecodeError, OSError):
+            pr = {}
+        if pr.get("number") == ref.number:
+            if ref.owner and pr.get("owner") and pr["owner"] != ref.owner:
+                return False
+            if ref.repo and pr.get("repo") and pr["repo"] != ref.repo:
+                return False
+            return True
+    # Fall back to the PR-slugged dir name (e.g. owner-repo-pr27-<ts>).
+    name = d.name
+    if ref.owner and ref.repo and name.startswith(
+        f"{ref.owner}-{ref.repo}-pr{ref.number}-"
+    ):
+        return True
+    return f"-pr{ref.number}-" in name or name.startswith(f"pr{ref.number}-")
+
+
+def find_run_for_pr(base: Path, pr_ref: str) -> Path | None:
+    ref = parse_pr_ref(pr_ref)
+    for d in _run_dirs(base):  # already newest-first
+        if _run_matches_pr(d, ref):
+            return d
+    return None
+
+
+def resolve_run_dir(arg: str | None, cwd: Path, pr_ref: str | None = None) -> Path:
+    if arg is None and pr_ref:
+        d = find_run_for_pr(cwd, pr_ref)
+        if d is None:
+            raise FileNotFoundError(
+                f"no run found for PR {pr_ref} under ./.reviewr/runs — "
+                "pass the run dir explicitly"
+            )
+        return d
     if arg is None:
         d = find_latest_run(cwd)
         if d is None:

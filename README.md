@@ -91,8 +91,10 @@ from scratch every run. Builds in the worktree therefore write through to your
 checkout's caches (fine for incremental build output). Auto-clone mode doesn't
 need this: the clone is cached and keeps its own artifacts.
 
-Artifacts land in `./.reviewr/runs/<timestamp>/` — in your current directory,
-never inside the ephemeral worktree/clone. Each run writes: per-round reviewer
+Artifacts land in `./.reviewr/runs/<owner>-<repo>-pr<N>-<timestamp>/` — named by
+PR so parallel runs are easy to tell apart — in your current directory, never
+inside the ephemeral worktree/clone. (`publish`/`fix` can find the right one by
+`--pr`, so you rarely need the path.) Each run writes: per-round reviewer
 outputs and raw CLI logs, `state-*.json` (the evolving findings + votes),
 `pr.diff`, the final `REVIEW.md` (rendered from JSON), `run.log` (the on-screen
 log), and `review.json` (the machine-readable bundle — PR identity, run
@@ -107,11 +109,16 @@ of standalone comments): a summary body plus one inline comment per finding,
 anchored to the line it concerns.
 
 ```bash
-reviewr publish                      # publish the latest run under ./.reviewr/runs
-reviewr publish .reviewr/runs/<ts>   # a specific run dir, review.json, or REVIEW.md
+reviewr publish --pr <url>           # pick the run for this PR automatically
+reviewr publish                      # else the most recent run under ./.reviewr/runs
+reviewr publish .reviewr/runs/<dir>  # or a specific run dir/review.json/REVIEW.md
 reviewr publish --dry-run            # print what would be posted, post nothing
 reviewr publish --event REQUEST_CHANGES   # default is COMMENT
 ```
+
+With many runs in flight, pass `--pr` (URL, `owner/repo#123`, or a bare number)
+and reviewr selects the matching run by its recorded PR identity (newest if
+several) — no need to remember which directory is which.
 
 The summary body records that this was a multi-AI consensus review, which AIs
 took part, how many rounds it ran, whether it converged, the composed review,
