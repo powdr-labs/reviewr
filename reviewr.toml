@@ -10,6 +10,8 @@ name = "claude"
 # --json-schema constrains that answer to our findings schema;
 # --dangerously-skip-permissions lets it read/search the repo non-interactively.
 command = ["claude", "-p", "--output-format", "json", "--dangerously-skip-permissions"]
+# In `reviewr fix` the agent edits files; skip the JSON envelope (we read the diff).
+fix_command = ["claude", "-p", "--dangerously-skip-permissions"]
 prompt_via = "stdin"
 result_from = "claude_json"
 schema_arg = "--json-schema"
@@ -21,6 +23,8 @@ name = "codex"
 # codex exec reads the prompt from stdin; --output-schema constrains the final
 # message; -o writes that final message to a file we read back.
 command = ["codex", "exec", "--sandbox", "read-only", "--skip-git-repo-check"]
+# In `reviewr fix` the agent must edit files, so it needs write access.
+fix_command = ["codex", "exec", "--sandbox", "workspace-write", "--skip-git-repo-check"]
 prompt_via = "stdin"
 result_from = "last_message_file"
 schema_arg = "--output-schema"
@@ -33,6 +37,11 @@ drop_rejected = true   # stop carrying findings the panel votes down
 
 [composer]
 reviewer = "codex"    # who edits the final REVIEW.md; omit for deterministic render
+
+[fix]
+decider = "claude"        # who reconciles the candidate patches into the final fix
+max_rounds = 2            # rounds of propose/revise before the decider (>=1)
+branch_prefix = "reviewr/fix-pr"   # fix branch = f"{branch_prefix}{pr_number}"
 
 [worktree]
 # In --repo mode the PR is checked out into a throwaway git worktree, which

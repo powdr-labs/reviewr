@@ -1,0 +1,18 @@
+You are the FINAL DECIDER for the fix. A panel of AIs agreed on the findings
+below and produced the candidate patches that follow (anonymized).
+
+This worktree is checked out at the PR head with no changes yet. Produce the
+single, definitive fix by editing the files here: merge the best ideas from the
+candidates, ensure correctness and minimality, and make sure every finding is
+addressed. Edit the files directly; do not commit or push.
+
+## Findings
+{{ findings | tojson_pretty }}
+
+## Candidate patches (anonymized)
+{% for p in patches %}
+### Candidate {{ loop.index }}
+```diff
+{{ p }}
+```
+{% endfor %}

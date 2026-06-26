@@ -122,6 +122,38 @@ If the run predates `review.json` or didn't record the PR, supply it with
 `--pr` (a PR URL, `owner/repo#123`, or a bare number). Posting uses `gh`, so
 `gh auth` must have write access to the repo.
 
+## Fix
+
+Turn an agreed review into a fix PR. The same AIs each get their **own writable
+worktree** at the PR head and edit the files to fix the findings; we capture
+each one's diff as a candidate patch. They debate (each revises after seeing
+the others' anonymized patches) until the patches stabilise, then a **decider**
+(claude by default) reconciles them into the definitive fix. That fix is
+committed to a branch and opened as a PR **targeting the reviewed PR's head
+branch**.
+
+```bash
+reviewr fix                 # fix the latest run
+reviewr fix --dry-run       # produce the fix and print the patch; don't push/open
+reviewr fix .reviewr/runs/<ts> --repo ~/src/powdr   # branch from a local checkout
+```
+
+Like `review`, it uses your local checkout (`--repo`) or clones the repo
+(cached under `--clone-dir`). The fix branch is `reviewr/fix-pr<N>` (configurable
+via `[fix].branch_prefix`); it's pushed with `--force-with-lease`, so re-running
+updates the same branch. Opening the PR uses `gh`, which needs **write access**
+to the repo (this assumes a same-repo PR, not a fork).
+
+Configure under `[fix]`: `decider` (who reconciles), `max_rounds` (propose/revise
+rounds before the decider), `branch_prefix`. Each reviewer needs a `fix_command`
+with write permissions (e.g. codex `--sandbox workspace-write`); it falls back
+to `command` if unset.
+
+> Note: fix agents run in parallel in separate worktrees that **share** the
+> symlinked build caches (`[worktree].link`). If two agents kick off a heavy
+> build at once they write the same cache concurrently — usually fine, but the
+> main thing to watch.
+
 ## Configure
 
 Everything lives in `reviewr.toml`. Add/remove `[[reviewers]]`, tune
@@ -165,6 +197,7 @@ reviewr/
   orchestrator.py  the round loop; writes run.log + review.json
   composer.py      final REVIEW.md
   publish.py       post a run to the PR as one line-anchored review
-  cli.py           `reviewr` entry point (review, publish)
+  fix.py           AIs propose/reconcile patches -> open a fix PR
+  cli.py           `reviewr` entry point (review, publish, fix)
 prompts/           review.j2 / critique.j2 / compose.j2
 ```

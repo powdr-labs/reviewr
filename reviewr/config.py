@@ -40,6 +40,14 @@ class ReviewerConfig:
     timeout: int = 600  # seconds per reviewer per round
     env: dict[str, str] = field(default_factory=dict)
 
+    # Command used in `reviewr fix`, where the agent must EDIT files (needs
+    # write permissions, e.g. codex `--sandbox workspace-write`). Falls back to
+    # `command` if unset. The prompt is delivered the same way (`prompt_via`).
+    fix_command: list[str] | None = None
+
+    def fix_argv(self) -> list[str]:
+        return list(self.fix_command if self.fix_command else self.command)
+
 
 @dataclass
 class ConsensusConfig:
@@ -69,11 +77,22 @@ class WorktreeConfig:
 
 
 @dataclass
+class FixConfig:
+    # Reviewer (from [[reviewers]]) that decides the final fix.
+    decider: str = "claude"
+    # Rounds of proposing/revising patches before the decider (>=1).
+    max_rounds: int = 2
+    # Branch name prefix for the fix PR: f"{branch_prefix}{number}".
+    branch_prefix: str = "reviewr/fix-pr"
+
+
+@dataclass
 class Config:
     reviewers: list[ReviewerConfig]
     consensus: ConsensusConfig
     composer: ComposerConfig
     worktree: WorktreeConfig
+    fix: FixConfig
 
     def reviewer(self, name: str) -> ReviewerConfig | None:
         return next((r for r in self.reviewers if r.name == name), None)
@@ -102,6 +121,7 @@ def load_config(path: str | Path) -> Config:
                 last_message_arg=r.get("last_message_arg"),
                 timeout=int(r.get("timeout", 600)),
                 env=_expand_env(r.get("env", {})),
+                fix_command=(list(r["fix_command"]) if r.get("fix_command") else None),
             )
         )
     if not reviewers:
@@ -121,9 +141,17 @@ def load_config(path: str | Path) -> Config:
         link=list(wt.get("link", DEFAULT_LINK_PATHS)),
     )
 
+    fx = data.get("fix", {})
+    fix = FixConfig(
+        decider=fx.get("decider", "claude"),
+        max_rounds=int(fx.get("max_rounds", 2)),
+        branch_prefix=fx.get("branch_prefix", "reviewr/fix-pr"),
+    )
+
     return Config(
         reviewers=reviewers,
         consensus=consensus,
         composer=composer,
         worktree=worktree,
+        fix=fix,
     )

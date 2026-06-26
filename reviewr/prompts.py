@@ -32,3 +32,19 @@ def render_critique(pr: PRContext, findings_view: list[dict], round_idx: int) ->
 
 def render_compose(pr: PRContext, findings: list[dict]) -> str:
     return _env.get_template("compose.j2").render(pr=pr, findings=findings)
+
+
+def render_fix(findings: list[dict]) -> str:
+    return _env.get_template("fix.j2").render(findings=findings)
+
+
+def render_fix_critique(findings: list[dict], patches: list[str]) -> str:
+    return _env.get_template("fix_critique.j2").render(
+        findings=findings, patches=patches
+    )
+
+
+def render_fix_decide(findings: list[dict], patches: list[str]) -> str:
+    return _env.get_template("fix_decide.j2").render(
+        findings=findings, patches=patches
+    )

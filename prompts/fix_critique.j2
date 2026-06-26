@@ -1,0 +1,20 @@
+You are collaborating with a panel of AIs to fix a pull request. Below are the
+agreed findings and the candidate patches the panel has produced so far. The
+patches are anonymized on purpose — judge them on technical merit, not on who
+wrote them.
+
+Your current edits are already in this worktree. Review the candidates, then
+revise your working tree to the best fix you can defend: adopt good ideas from
+the others, drop anything wrong, and make sure every finding is addressed
+minimally and correctly. Edit the files directly; do not commit or push.
+
+## Findings
+{{ findings | tojson_pretty }}
+
+## Candidate patches (anonymized)
+{% for p in patches %}
+### Candidate {{ loop.index }}
+```diff
+{{ p }}
+```
+{% endfor %}

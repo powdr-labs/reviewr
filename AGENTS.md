@@ -52,7 +52,8 @@ Reviewers run against a working tree resolved by `reviewr/pr.py`:
 | The round loop; writes `run.log` + `review.json` | `reviewr/orchestrator.py` |
 | Final `ComposedReview` (JSON) + `REVIEW.md` rendered from it | `reviewr/composer.py` |
 | Post a run to the PR as one line-anchored review | `reviewr/publish.py` |
-| CLI entry point (`review`, `publish`) | `reviewr/cli.py` |
+| Propose/reconcile patches, open a fix PR | `reviewr/fix.py` |
+| CLI entry point (`review`, `publish`, `fix`) | `reviewr/cli.py` |
 | Prompt templates | `prompts/*.j2` |
 
 ## Conventions / invariants — do not break these
@@ -77,6 +78,18 @@ Reviewers run against a working tree resolved by `reviewr/pr.py`:
   authoritative or parse it back into data.
 - A reviewer failing a round must not crash the run — `run_reviewer` returns a
   `RunResult` with `error` set; the loop continues.
+
+## `fix` specifics
+
+- Fix agents must edit files, so they run with `fix_command` (write
+  permissions, e.g. codex `--sandbox workspace-write`), falling back to
+  `command`. They produce changes by editing their own worktree; the candidate
+  patch is captured via `git add -A && git diff --cached`, not structured output.
+- Each proposer gets its own worktree (reused across rounds); the decider gets a
+  fresh branch worktree (`-B`, so re-runs reset the branch). `run_fix` cleans up
+  all worktrees if it fails partway — keep that invariant.
+- The fix PR targets the reviewed PR's **head** branch (`pr.head`), pushed with
+  `--force-with-lease`. Assumes a same-repo PR with write access.
 
 ## Adding a reviewer
 

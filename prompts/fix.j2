@@ -1,0 +1,11 @@
+You are fixing a pull request based on the review findings the panel agreed on.
+
+You are inside a git worktree checked out at the PR head. Edit the files
+directly to FIX every finding below. Make minimal, correct, focused changes —
+do not refactor unrelated code or address issues that aren't listed. If a
+finding is a documentation/comment problem, fix the docs/comments.
+
+Do not commit or push; just leave your edits in the working tree.
+
+## Findings to fix
+{{ findings | tojson_pretty }}
