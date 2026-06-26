@@ -99,6 +99,7 @@ async def run_reviewer(
     repo_dir: str,
     artifact_dir: Path,
     tag: str,
+    output_model=ReviewerOutput,
 ) -> RunResult:
     """Run one reviewer once. Never raises: failures become RunResult(error=...)."""
     argv = list(rv.command)
@@ -157,7 +158,7 @@ async def run_reviewer(
             error="no JSON found in output", returncode=proc.returncode,
         )
     try:
-        output = ReviewerOutput.model_validate(data)
+        output = output_model.model_validate(data)
     except Exception as e:  # validation error
         return RunResult(
             rv.name, None, text,

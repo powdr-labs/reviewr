@@ -1,13 +1,27 @@
-"""Produce the final REVIEW.md from the converged state."""
+"""Produce the final review.
+
+The authoritative artifact is a structured `ComposedReview` (JSON): the editor
+AI merges the panel's confirmed findings, grouping every file/line a single
+issue touches into one finding with a `locations` list. The human-readable
+`REVIEW.md` is then rendered deterministically from that JSON, so the two never
+disagree.
+"""
 
 from __future__ import annotations
 
-import asyncio
+import json
 from pathlib import Path
 
 from .backends import run_reviewer
 from .config import Config
-from .findings import SEVERITY_ORDER, Severity
+from .findings import (
+    ComposedFinding,
+    ComposedReview,
+    Location,
+    SEVERITY_ORDER,
+    Severity,
+    composed_json_schema,
+)
 from .pr import PRContext
 from .prompts import render_compose
 from .state import ReviewState
@@ -21,71 +35,85 @@ _SEV_TITLE = {
 }
 
 
-def _deterministic_review(pr: PRContext, state: ReviewState) -> str:
-    """Fallback composer: render markdown directly, no AI editor."""
-    lines = [f"# Review: {pr.title}", ""]
-    confirmed = state.confirmed_sorted()
-    if not confirmed:
-        lines.append("No issues agreed on by the panel.")
-        return "\n".join(lines) + "\n"
+def _deterministic_review(state: ReviewState) -> ComposedReview:
+    """Fallback when no editor AI is configured/available: 1 location each."""
+    findings = [
+        ComposedFinding(
+            title=tf.finding.title,
+            severity=tf.finding.severity,
+            category=tf.finding.category,
+            locations=[Location(file=tf.finding.file, line=tf.finding.line)],
+            description=tf.finding.description,
+            suggested_fix=tf.finding.suggested_fix,
+        )
+        for tf in state.confirmed_sorted()
+    ]
+    verdict = "Approve" if not findings else "Review the findings below."
+    return ComposedReview(
+        summary="Automated multi-AI consensus review.",
+        verdict=verdict,
+        findings=findings,
+    )
 
-    by_sev: dict[Severity, list] = {}
-    for tf in confirmed:
-        by_sev.setdefault(tf.finding.severity, []).append(tf)
 
-    for sev in sorted(by_sev, key=lambda s: SEVERITY_ORDER[s]):
-        lines.append(f"## {_SEV_TITLE[sev]}")
-        lines.append("")
-        for tf in by_sev[sev]:
-            f = tf.finding
-            loc = f.file + (f":{f.line}" if f.line else "")
-            lines.append(f"### {f.title}")
-            lines.append(f"`{loc}` · {f.category.value}")
-            lines.append("")
-            lines.append(f.description)
-            if f.suggested_fix:
+def render_markdown(review: ComposedReview, pr: PRContext | None = None) -> str:
+    title = pr.title if pr else None
+    lines: list[str] = []
+    if title:
+        lines += [f"# Review: {title}", ""]
+    if review.summary:
+        lines += [review.summary, ""]
+
+    if not review.findings:
+        lines += ["No issues agreed on by the panel.", ""]
+    else:
+        by_sev: dict[Severity, list[ComposedFinding]] = {}
+        for f in review.findings:
+            by_sev.setdefault(f.severity, []).append(f)
+        for sev in sorted(by_sev, key=lambda s: SEVERITY_ORDER[s]):
+            lines += [f"## {_SEV_TITLE[sev]}", ""]
+            for f in by_sev[sev]:
+                lines.append(f"### {f.title}")
+                locs = ", ".join(
+                    f"`{loc.file}" + (f":{loc.line}" if loc.line else "") + "`"
+                    for loc in f.locations
+                )
+                lines += [f"**Location(s):** {locs} · {f.category.value}", ""]
+                lines.append(f.description)
+                if f.suggested_fix:
+                    lines += ["", f"**Suggested fix:** {f.suggested_fix}"]
                 lines.append("")
-                lines.append(f"**Suggested fix:** {f.suggested_fix}")
-            lines.append("")
-    return "\n".join(lines) + "\n"
+
+    if review.verdict:
+        lines += ["## Verdict", "", review.verdict, ""]
+    return "\n".join(lines)
 
 
 async def compose(
     pr: PRContext, state: ReviewState, config: Config, run_dir: Path
-) -> str:
+) -> tuple[ComposedReview, str]:
+    """Return (structured review, rendered markdown)."""
     confirmed = [
         {**tf.finding.model_dump(), "id": tf.id} for tf in state.confirmed_sorted()
     ]
 
-    if not config.composer.reviewer:
-        return _deterministic_review(pr, state)
-
-    rv = config.reviewer(config.composer.reviewer)
+    rv = config.reviewer(config.composer.reviewer) if config.composer.reviewer else None
     if rv is None:
-        return _deterministic_review(pr, state)
+        review = _deterministic_review(state)
+        return review, render_markdown(review, pr)
 
+    schema_path = run_dir / "composed-schema.json"
+    schema_path.write_text(json.dumps(composed_json_schema(), indent=2))
     prompt = render_compose(pr, confirmed)
-    # Compose returns prose markdown, not structured JSON -> read raw output.
-    raw_rv = type(rv)(
-        name=rv.name,
-        command=rv.command,
-        prompt_via=rv.prompt_via,
-        result_from=rv.result_from,
-        schema_arg=None,  # no schema: we want free-form markdown
-        last_message_arg=rv.last_message_arg,
-        timeout=rv.timeout,
-        env=rv.env,
-    )
+
     res = await run_reviewer(
-        raw_rv,
+        rv,
         prompt,
-        schema_path=None,
+        schema_path=schema_path,
         repo_dir=pr.repo_dir,
         artifact_dir=run_dir,
         tag="compose",
+        output_model=ComposedReview,
     )
-    # res.output will be None (markdown isn't valid ReviewerOutput JSON); use raw.
-    text = res.raw.strip()
-    if not text:
-        return _deterministic_review(pr, state)
-    return text + "\n"
+    review = res.output if res.output else _deterministic_review(state)
+    return review, render_markdown(review, pr)

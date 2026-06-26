@@ -19,9 +19,13 @@ findings list before a single composed `REVIEW.md` is produced.
    (disputes ≥ agrees), or `contested`. The loop stops when a round adds no new
    findings, nothing is contested, and the status set is stable — or at
    `max_rounds`.
-4. **Compose.** A designated editor AI turns the confirmed findings into one
-   clean, severity-sorted `REVIEW.md` (or a deterministic render if no editor
-   is configured).
+4. **Compose.** A designated editor AI turns the confirmed findings into a
+   structured **`ComposedReview` (JSON)** — the authoritative final artifact —
+   merging duplicates so that one underlying issue spanning several files
+   becomes a single finding with a `locations: [{file, line}, …]` list. The
+   human-readable, severity-sorted `REVIEW.md` is then *rendered
+   deterministically from that JSON*, so the two never disagree. (Falls back to
+   a deterministic compose if no editor is configured.)
 
 ## Prerequisites
 
@@ -82,9 +86,11 @@ number requires `--repo` to know which repo). Auto-clones are cached under
 Artifacts land in `./.reviewr/runs/<timestamp>/` — in your current directory,
 never inside the ephemeral worktree/clone. Each run writes: per-round reviewer
 outputs and raw CLI logs, `state-*.json` (the evolving findings + votes),
-`pr.diff`, the final `REVIEW.md`, `run.log` (the on-screen log), and
-`review.json` (machine-readable bundle used by `reviewr publish`). Point
-`--config` at your `reviewr.toml` if it isn't in the cwd.
+`pr.diff`, the final `REVIEW.md` (rendered from JSON), `run.log` (the on-screen
+log), and `review.json` (the machine-readable bundle — PR identity, run
+metadata, and the structured `review` whose findings carry multiple
+`locations` — used by `reviewr publish`). Point `--config` at your
+`reviewr.toml` if it isn't in the cwd.
 
 ## Publish
 

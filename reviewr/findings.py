@@ -93,6 +93,34 @@ class ReviewerOutput(BaseModel):
     )
 
 
+class Location(BaseModel):
+    file: str = Field(description="Path of the file.")
+    line: Optional[int] = Field(default=None, description="Line number if applicable.")
+
+
+class ComposedFinding(BaseModel):
+    """A finding in the final, edited review. May span several locations."""
+
+    title: str = Field(description="One-line summary of the issue.")
+    severity: Severity
+    category: Category
+    locations: list[Location] = Field(
+        description="Every file/line this finding applies to (>=1)."
+    )
+    description: str = Field(description="What is wrong and why it matters.")
+    suggested_fix: Optional[str] = Field(default=None)
+
+
+class ComposedReview(BaseModel):
+    """The final review: the authoritative JSON the Markdown is rendered from."""
+
+    summary: str = Field(description="2-4 sentence overall assessment.")
+    verdict: str = Field(
+        description="e.g. 'Approve', 'Request changes', with brief reasoning."
+    )
+    findings: list[ComposedFinding] = Field(default_factory=list)
+
+
 def _strictify(node):
     """Make a JSON Schema satisfy OpenAI/Codex strict structured-output rules.
 
@@ -117,3 +145,8 @@ def _strictify(node):
 def output_json_schema() -> dict:
     """Strict JSON Schema handed to the CLIs for structured output."""
     return _strictify(ReviewerOutput.model_json_schema())
+
+
+def composed_json_schema() -> dict:
+    """Strict JSON Schema for the final composed review."""
+    return _strictify(ComposedReview.model_json_schema())

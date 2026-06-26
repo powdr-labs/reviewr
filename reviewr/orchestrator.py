@@ -118,23 +118,21 @@ class Orchestrator:
 
         # --- Compose final review ---------------------------------------
         self.log("Composing final review")
-        review_md = await compose(self.pr, self.state, self.config, self.run_dir)
+        composed, review_md = await compose(
+            self.pr, self.state, self.config, self.run_dir
+        )
         out_path = self.run_dir / "REVIEW.md"
         out_path.write_text(review_md)
         self.log(f"Wrote {out_path}")
 
-        self._write_publish_artifacts(review_md)
+        self._write_publish_artifacts(composed, review_md)
         return review_md
 
-    def _write_publish_artifacts(self, review_md: str) -> None:
+    def _write_publish_artifacts(self, composed, review_md: str) -> None:
         """Persist run.log and review.json so `reviewr publish` can use them."""
         log_text = "\n".join(self.log_lines)
         (self.run_dir / "run.log").write_text(log_text + "\n")
 
-        findings = [
-            {"id": tf.id, **tf.finding.model_dump()}
-            for tf in self.state.confirmed_sorted()
-        ]
         bundle = {
             "pr": {
                 "owner": self.pr.owner,
@@ -150,7 +148,7 @@ class Orchestrator:
             "rounds_run": self.rounds_run,
             "converged": self.converged,
             "max_rounds": self.config.consensus.max_rounds,
-            "findings": findings,
+            "review": composed.model_dump(),
             "review_markdown": review_md,
             "log": log_text,
         }

@@ -43,11 +43,11 @@ Reviewers run against a working tree resolved by `reviewr/pr.py`:
 | --- | --- |
 | Load `reviewr.toml` | `reviewr/config.py` |
 | Fetch PR / diff | `reviewr/pr.py` |
-| Finding/Vote/Output schema | `reviewr/findings.py` |
+| Finding/Vote/Output + ComposedReview schema | `reviewr/findings.py` |
 | Invoke a CLI reviewer, parse output | `reviewr/backends.py` |
 | Shared anonymized state, voting, convergence | `reviewr/state.py` |
 | The round loop; writes `run.log` + `review.json` | `reviewr/orchestrator.py` |
-| Final `REVIEW.md` | `reviewr/composer.py` |
+| Final `ComposedReview` (JSON) + `REVIEW.md` rendered from it | `reviewr/composer.py` |
 | Post a run to the PR as one line-anchored review | `reviewr/publish.py` |
 | CLI entry point (`review`, `publish`) | `reviewr/cli.py` |
 | Prompt templates | `prompts/*.j2` |
@@ -67,6 +67,11 @@ Reviewers run against a working tree resolved by `reviewr/pr.py`:
   flags), without code changes. Preserve that.
 - **Reviewers run inside the target repo** so they can explore real code, not
   just the diff. Don't reduce them to diff-only.
+- **JSON is the source of truth for the final review.** The composer emits a
+  structured `ComposedReview` (findings carry a `locations` list); `REVIEW.md`
+  is rendered from it via `composer.render_markdown`, and `publish` anchors a
+  comment per location from the same JSON. Don't make the Markdown
+  authoritative or parse it back into data.
 - A reviewer failing a round must not crash the run — `run_reviewer` returns a
   `RunResult` with `error` set; the loop continues.
 

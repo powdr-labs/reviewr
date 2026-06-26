@@ -86,7 +86,15 @@ def _reconstruct_bundle(run_dir: Path) -> dict:
             reviewers.add(f.get("origin", ""))
             reviewers.update(f.get("votes", {}).keys())
             if f.get("status") == "confirmed":
-                findings.append({"id": f["id"], **f["finding"]})
+                fin = f["finding"]
+                findings.append({
+                    "title": fin.get("title", ""),
+                    "severity": fin.get("severity", ""),
+                    "category": fin.get("category", ""),
+                    "description": fin.get("description", ""),
+                    "suggested_fix": fin.get("suggested_fix"),
+                    "locations": [{"file": fin.get("file"), "line": fin.get("line")}],
+                })
     review_md = ""
     if (run_dir / "REVIEW.md").exists():
         review_md = (run_dir / "REVIEW.md").read_text()
@@ -111,6 +119,11 @@ def load_bundle(run_dir: Path, pr_override: str | None) -> Bundle:
     rj = run_dir / "review.json"
     data = json.loads(rj.read_text()) if rj.exists() else _reconstruct_bundle(run_dir)
 
+    # Findings live under the structured `review` for fresh runs; the
+    # reconstruct path puts them at top level.
+    review = data.get("review") or {}
+    findings = review.get("findings", data.get("findings", []))
+
     pr = dict(data.get("pr") or {})
     if pr_override:
         ref = parse_pr_ref(pr_override)
@@ -129,7 +142,7 @@ def load_bundle(run_dir: Path, pr_override: str | None) -> Bundle:
         reviewers=data.get("reviewers", []),
         rounds_run=data.get("rounds_run", 0),
         converged=data.get("converged", False),
-        findings=data.get("findings", []),
+        findings=findings,
         review_markdown=data.get("review_markdown", ""),
         log=data.get("log", ""),
         run_dir=run_dir,
@@ -199,16 +212,17 @@ def _finding_comment_body(f: dict) -> str:
 def build_payload(b: Bundle, diff_text: str, event: str) -> dict:
     commentable = commentable_lines(diff_text)
     inline: list[dict] = []
-    orphans: list[dict] = []
+    orphans: list[tuple[dict, dict]] = []  # (finding, location) not in the diff
     for f in b.findings:
-        path, line = f.get("file"), f.get("line")
-        if line and path in commentable and line in commentable[path]:
-            inline.append(
-                {"path": path, "line": int(line), "side": "RIGHT",
-                 "body": _finding_comment_body(f)}
-            )
-        else:
-            orphans.append(f)
+        body = _finding_comment_body(f)
+        for loc in f.get("locations", []):
+            path, line = loc.get("file"), loc.get("line")
+            if line and path in commentable and line in commentable[path]:
+                inline.append(
+                    {"path": path, "line": int(line), "side": "RIGHT", "body": body}
+                )
+            else:
+                orphans.append((f, loc))
 
     body = _summary_body(b, n_inline=len(inline), orphans=orphans)
     return {"body": body, "event": event, "comments": inline}
@@ -233,12 +247,12 @@ def _summary_body(b: Bundle, n_inline: int, orphans: list[dict]) -> str:
         lines += ["", "---", "",
                   "### Findings not on changed lines",
                   "_(couldn't be anchored to the diff)_", ""]
-        for f in orphans:
-            loc = f.get("file", "")
-            if f.get("line"):
-                loc += f":{f['line']}"
+        for f, loc in orphans:
+            where = loc.get("file", "")
+            if loc.get("line"):
+                where += f":{loc['line']}"
             lines.append(
-                f"- **{f.get('severity','').upper()}** `{loc}` — "
+                f"- **{f.get('severity','').upper()}** `{where}` — "
                 f"{f.get('title','')}"
             )
     if b.log:
