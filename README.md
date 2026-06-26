@@ -79,10 +79,34 @@ A `REF` may be a PR URL, an `owner/repo#123` spec, or a bare number (bare
 number requires `--repo` to know which repo). Auto-clones are cached under
 `~/.cache/reviewr/clones` (override with `--clone-dir`), so re-runs just fetch.
 
-Artifacts (per-round outputs, raw CLI logs, `state-*.json`, and the final
-`REVIEW.md`) land in `./.reviewr/runs/<timestamp>/` — in your current
-directory, never inside the ephemeral worktree/clone. Point `--config` at your
-`reviewr.toml` if it isn't in the cwd.
+Artifacts land in `./.reviewr/runs/<timestamp>/` — in your current directory,
+never inside the ephemeral worktree/clone. Each run writes: per-round reviewer
+outputs and raw CLI logs, `state-*.json` (the evolving findings + votes),
+`pr.diff`, the final `REVIEW.md`, `run.log` (the on-screen log), and
+`review.json` (machine-readable bundle used by `reviewr publish`). Point
+`--config` at your `reviewr.toml` if it isn't in the cwd.
+
+## Publish
+
+Post a finished review back to its GitHub PR as a single **review** (not a pile
+of standalone comments): a summary body plus one inline comment per finding,
+anchored to the line it concerns.
+
+```bash
+reviewr publish                      # publish the latest run under ./.reviewr/runs
+reviewr publish .reviewr/runs/<ts>   # a specific run dir, review.json, or REVIEW.md
+reviewr publish --dry-run            # print what would be posted, post nothing
+reviewr publish --event REQUEST_CHANGES   # default is COMMENT
+```
+
+The summary body records that this was a multi-AI consensus review, which AIs
+took part, how many rounds it ran, whether it converged, the composed review,
+and the full run log (collapsed). Findings whose line isn't part of the PR diff
+can't be anchored inline, so they're listed in the body instead of dropped.
+
+If the run predates `review.json` or didn't record the PR, supply it with
+`--pr` (a PR URL, `owner/repo#123`, or a bare number). Posting uses `gh`, so
+`gh auth` must have write access to the repo.
 
 ## Configure
 
@@ -121,8 +145,9 @@ reviewr/
   findings.py      Finding / Vote / ReviewerOutput schema
   backends.py      invoke a CLI reviewer, parse structured output
   state.py         shared anonymized findings, voting, convergence
-  orchestrator.py  the round loop
+  orchestrator.py  the round loop; writes run.log + review.json
   composer.py      final REVIEW.md
-  cli.py           `reviewr` entry point
+  publish.py       post a run to the PR as one line-anchored review
+  cli.py           `reviewr` entry point (review, publish)
 prompts/           review.j2 / critique.j2 / compose.j2
 ```

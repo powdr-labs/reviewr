@@ -11,6 +11,7 @@ import click
 from .config import load_config
 from .orchestrator import Orchestrator
 from . import pr as pr_mod
+from . import publish as publish_mod
 
 DEFAULT_CLONE_DIR = "~/.cache/reviewr/clones"
 
@@ -48,6 +49,14 @@ def review(ref, config_path, repo_dir, clone_dir, base, head, diff_file, run_dir
     """
     config = load_config(config_path)
 
+    # Tee everything printed to screen into a buffer so the run is reproducible
+    # in run.log / review.json (used by `reviewr publish`).
+    log_lines: list[str] = []
+
+    def logger(msg: str = "") -> None:
+        log_lines.append(str(msg))
+        click.echo(msg)
+
     # Resolve the review target into a prepared working tree.
     if diff_file:
         prepared = pr_mod.from_diff_file(diff_file, repo_dir or ".")
@@ -56,10 +65,10 @@ def review(ref, config_path, repo_dir, clone_dir, base, head, diff_file, run_dir
     elif ref:
         pref = pr_mod.parse_pr_ref(ref)
         if repo_dir:
-            prepared = pr_mod.prepare_from_local(repo_dir, pref.number, log=click.echo)
+            prepared = pr_mod.prepare_from_local(repo_dir, pref.number, log=logger)
         elif pref.slug:
             prepared = pr_mod.prepare_from_clone(
-                pref, clone_dir, pref.number, log=click.echo
+                pref, clone_dir, pref.number, log=logger
             )
         else:
             raise click.UsageError(
@@ -77,19 +86,68 @@ def review(ref, config_path, repo_dir, clone_dir, base, head, diff_file, run_dir
         ts = datetime.now().strftime("%Y%m%d-%H%M%S")
         rdir = Path.cwd() / ".reviewr" / "runs" / ts
 
-    click.echo(f"Reviewing: {pr.short()}")
-    click.echo(f"Inspecting code in: {pr.repo_dir}")
-    click.echo(f"Reviewers: {', '.join(r.name for r in config.reviewers)}")
-    click.echo(f"Artifacts: {rdir}\n")
+    logger(f"Reviewing: {pr.short()}")
+    logger(f"Inspecting code in: {pr.repo_dir}")
+    logger(f"Reviewers: {', '.join(r.name for r in config.reviewers)}")
+    logger(f"Artifacts: {rdir}\n")
 
     try:
-        orch = Orchestrator(config, pr, rdir, log=click.echo)
+        orch = Orchestrator(config, pr, rdir, log=logger, log_lines=log_lines)
         review_md = asyncio.run(orch.run())
     finally:
         prepared.cleanup()
 
     click.echo("\n" + "=" * 60)
     click.echo(review_md)
+
+
+@main.command()
+@click.argument("run", required=False)
+@click.option("--pr", "pr_override",
+              help="PR URL/owner-repo#n/number, if the run doesn't record it.")
+@click.option("--event", type=click.Choice(["COMMENT", "APPROVE", "REQUEST_CHANGES"]),
+              default="COMMENT", help="Review event to submit (default COMMENT).")
+@click.option("--dry-run", is_flag=True,
+              help="Print what would be posted instead of posting.")
+def publish(run, pr_override, event, dry_run) -> None:
+    """Post a finished review to its GitHub PR as one line-anchored review.
+
+    RUN is a run directory, a review.json, or a REVIEW.md. Defaults to the
+    latest run under ./.reviewr/runs.
+    """
+    run_dir = publish_mod.resolve_run_dir(run, Path.cwd())
+    bundle = publish_mod.load_bundle(run_dir, pr_override)
+
+    diff_path = run_dir / "pr.diff"
+    if diff_path.exists():
+        diff_text = diff_path.read_text()
+    else:
+        diff_text = pr_mod._run(
+            ["gh", "pr", "diff", str(bundle.pr["number"]),
+             "-R", f"{bundle.pr['owner']}/{bundle.pr['repo']}"]
+        )
+
+    payload = publish_mod.build_payload(bundle, diff_text, event)
+    pr = bundle.pr
+    target = f"{pr['owner']}/{pr['repo']}#{pr['number']}"
+    click.echo(f"Run: {run_dir}")
+    click.echo(f"Target PR: {target}  ({pr.get('url','')})")
+    click.echo(
+        f"Findings: {len(bundle.findings)}  "
+        f"inline: {len(payload['comments'])}  "
+        f"event: {event}"
+    )
+
+    if dry_run:
+        click.echo("\n--- DRY RUN: review body ---\n")
+        click.echo(payload["body"])
+        click.echo("\n--- inline comments ---")
+        for c in payload["comments"]:
+            click.echo(f"  {c['path']}:{c['line']} — {c['body'].splitlines()[0]}")
+        return
+
+    result = publish_mod.post_review(bundle, payload)
+    click.echo(f"\nPosted review: {result.get('html_url', '(submitted)')}")
 
 
 if __name__ == "__main__":

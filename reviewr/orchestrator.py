@@ -16,13 +16,18 @@ from .state import ReviewState
 
 
 class Orchestrator:
-    def __init__(self, config: Config, pr: PRContext, run_dir: Path, log=print):
+    def __init__(self, config: Config, pr: PRContext, run_dir: Path, log=print,
+                 log_lines: list | None = None):
         self.config = config
         self.pr = pr
         self.run_dir = run_dir
         self.state = ReviewState()
         self.log = log
+        # Shared buffer of everything printed to screen (for run.log/review.json).
+        self.log_lines = log_lines if log_lines is not None else []
         self.schema_path = run_dir / "schema.json"
+        self.rounds_run = 0
+        self.converged = False
 
     def _setup(self) -> None:
         self.run_dir.mkdir(parents=True, exist_ok=True)
@@ -102,7 +107,9 @@ class Orchestrator:
                 f"stable={snapshot == prev_snapshot}"
             )
 
+            self.rounds_run = rnd
             if new_count == 0 and not contested and snapshot == prev_snapshot:
+                self.converged = True
                 self.log(f"Converged after round {rnd}.")
                 break
             prev_snapshot = snapshot
@@ -115,4 +122,37 @@ class Orchestrator:
         out_path = self.run_dir / "REVIEW.md"
         out_path.write_text(review_md)
         self.log(f"Wrote {out_path}")
+
+        self._write_publish_artifacts(review_md)
         return review_md
+
+    def _write_publish_artifacts(self, review_md: str) -> None:
+        """Persist run.log and review.json so `reviewr publish` can use them."""
+        log_text = "\n".join(self.log_lines)
+        (self.run_dir / "run.log").write_text(log_text + "\n")
+
+        findings = [
+            {"id": tf.id, **tf.finding.model_dump()}
+            for tf in self.state.confirmed_sorted()
+        ]
+        bundle = {
+            "pr": {
+                "owner": self.pr.owner,
+                "repo": self.pr.repo,
+                "number": self.pr.number,
+                "base": self.pr.base,
+                "head": self.pr.head,
+                "title": self.pr.title,
+                "url": self.pr.url,
+            },
+            "reviewers": [r.name for r in self.config.reviewers],
+            "composer": self.config.composer.reviewer,
+            "rounds_run": self.rounds_run,
+            "converged": self.converged,
+            "max_rounds": self.config.consensus.max_rounds,
+            "findings": findings,
+            "review_markdown": review_md,
+            "log": log_text,
+        }
+        (self.run_dir / "review.json").write_text(json.dumps(bundle, indent=2))
+        self.log(f"Wrote {self.run_dir / 'review.json'}")

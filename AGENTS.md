@@ -46,9 +46,10 @@ Reviewers run against a working tree resolved by `reviewr/pr.py`:
 | Finding/Vote/Output schema | `reviewr/findings.py` |
 | Invoke a CLI reviewer, parse output | `reviewr/backends.py` |
 | Shared anonymized state, voting, convergence | `reviewr/state.py` |
-| The round loop | `reviewr/orchestrator.py` |
+| The round loop; writes `run.log` + `review.json` | `reviewr/orchestrator.py` |
 | Final `REVIEW.md` | `reviewr/composer.py` |
-| CLI entry point | `reviewr/cli.py` |
+| Post a run to the PR as one line-anchored review | `reviewr/publish.py` |
+| CLI entry point (`review`, `publish`) | `reviewr/cli.py` |
 | Prompt templates | `prompts/*.j2` |
 
 ## Conventions / invariants — do not break these

@@ -29,9 +29,17 @@ class PRContext:
     base: str
     head: str
     repo_dir: str  # reviewers run here so they can explore surrounding code
+    number: int | None = None
+    owner: str | None = None
+    repo: str | None = None
+    url: str | None = None
 
     def short(self) -> str:
         return f"{self.title} ({self.base}...{self.head})"
+
+    @property
+    def slug(self) -> str | None:
+        return f"{self.owner}/{self.repo}" if self.owner and self.repo else None
 
 
 @dataclass
@@ -91,10 +99,15 @@ def _github_context(number: int, repo_dir: str, gh_repo: str | None) -> PRContex
         _run(
             base
             + ["view", str(number), *repo_args,
-               "--json", "title,body,baseRefName,headRefName"],
+               "--json", "title,body,baseRefName,headRefName,url,number"],
             cwd=repo_dir,
         )
     )
+    url = meta.get("url", "") or ""
+    owner = repo = None
+    m = re.match(r"https?://github\.com/([^/]+)/([^/]+)/pull/\d+", url)
+    if m:
+        owner, repo = m.group(1), m.group(2)
     return PRContext(
         title=meta.get("title", f"PR #{number}"),
         description=meta.get("body") or "",
@@ -102,6 +115,10 @@ def _github_context(number: int, repo_dir: str, gh_repo: str | None) -> PRContex
         base=meta.get("baseRefName", ""),
         head=meta.get("headRefName", ""),
         repo_dir=repo_dir,
+        number=meta.get("number", number),
+        owner=owner,
+        repo=repo,
+        url=url,
     )
 
 
