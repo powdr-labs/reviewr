@@ -104,7 +104,12 @@ async def run_reviewer(
     argv = list(rv.command)
 
     if schema_path and rv.schema_arg:
-        argv += [rv.schema_arg, str(schema_path)]
+        if rv.schema_as == "inline":
+            # e.g. claude --json-schema '<schema json>'
+            argv += [rv.schema_arg, schema_path.read_text()]
+        else:
+            # e.g. codex --output-schema <path>
+            argv += [rv.schema_arg, str(schema_path)]
 
     last_message_file: Path | None = None
     if rv.result_from == "last_message_file" and rv.last_message_arg:

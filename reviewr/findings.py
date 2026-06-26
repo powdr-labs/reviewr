@@ -93,6 +93,27 @@ class ReviewerOutput(BaseModel):
     )
 
 
+def _strictify(node):
+    """Make a JSON Schema satisfy OpenAI/Codex strict structured-output rules.
+
+    Every object must set `additionalProperties: false` and list *all* of its
+    properties in `required`; `default` keys are not allowed. Optional fields
+    stay expressible because pydantic already emits them as nullable
+    (`anyOf: [..., {"type": "null"}]`), so a model can answer null.
+    """
+    if isinstance(node, dict):
+        node.pop("default", None)
+        if node.get("type") == "object" and "properties" in node:
+            node["additionalProperties"] = False
+            node["required"] = list(node["properties"].keys())
+        for v in node.values():
+            _strictify(v)
+    elif isinstance(node, list):
+        for v in node:
+            _strictify(v)
+    return node
+
+
 def output_json_schema() -> dict:
-    """JSON Schema handed to the CLIs for structured output."""
-    return ReviewerOutput.model_json_schema()
+    """Strict JSON Schema handed to the CLIs for structured output."""
+    return _strictify(ReviewerOutput.model_json_schema())

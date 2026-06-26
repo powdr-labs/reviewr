@@ -25,9 +25,13 @@ class ReviewerConfig:
     #   "stdout_json"        - find a JSON object anywhere in stdout
     result_from: str = "stdout_json"
 
-    # Flag used to pass the JSON Schema file (e.g. "--json-schema",
+    # Flag used to pass the JSON Schema (e.g. "--json-schema",
     # "--output-schema"). Omitted -> rely on the prompt + tolerant parsing.
     schema_arg: str | None = None
+
+    # How the schema value is delivered: "file" passes a path (codex), "inline"
+    # passes the schema JSON as the argument value (claude --json-schema).
+    schema_as: str = "file"
 
     # Flag used to ask the CLI to write its final message to a file
     # (e.g. codex `-o`). Required when result_from == "last_message_file".
@@ -80,6 +84,7 @@ def load_config(path: str | Path) -> Config:
                 prompt_via=r.get("prompt_via", "stdin"),
                 result_from=r.get("result_from", "stdout_json"),
                 schema_arg=r.get("schema_arg"),
+                schema_as=r.get("schema_as", "file"),
                 last_message_arg=r.get("last_message_arg"),
                 timeout=int(r.get("timeout", 600)),
                 env=_expand_env(r.get("env", {})),

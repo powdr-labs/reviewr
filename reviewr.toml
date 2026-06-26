@@ -13,6 +13,7 @@ command = ["claude", "-p", "--output-format", "json", "--dangerously-skip-permis
 prompt_via = "stdin"
 result_from = "claude_json"
 schema_arg = "--json-schema"
+schema_as = "inline"   # claude wants the schema JSON inline, not a file path
 timeout = 900
 
 [[reviewers]]
