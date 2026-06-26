@@ -23,14 +23,36 @@ findings list before a single composed `REVIEW.md` is produced.
    clean, severity-sorted `REVIEW.md` (or a deterministic render if no editor
    is configured).
 
+## Prerequisites
+
+- Python 3.11+
+- The reviewer CLIs on `PATH`, **authenticated**: `claude` (run it once to log
+  in) and `codex` (`codex login`).
+- `gh` (authenticated: `gh auth login`) and `git`, for fetching PRs.
+
 ## Install
 
+Install it as a global command so `reviewr` works from any directory:
+
 ```bash
-pip install -e .
+# with uv (recommended) — editable, so code edits apply without reinstalling
+uv tool install -e .
+
+# or with pipx
+pipx install -e .
 ```
 
-Requires the reviewer CLIs on `PATH` (`claude`, `codex`) and `gh`/`git` for PR
-fetching.
+Both put `reviewr` on your `PATH` (e.g. `~/.local/bin`). Verify with
+`reviewr --version`. To upgrade after pulling changes, re-run the install
+command (not needed for editable installs unless dependencies changed). Remove
+with `uv tool uninstall reviewr` / `pipx uninstall reviewr`.
+
+For local development without a global install:
+
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -e .
+```
 
 ## Use
 
@@ -64,10 +86,31 @@ directory, never inside the ephemeral worktree/clone. Point `--config` at your
 
 ## Configure
 
-See `reviewr.toml`. Add/remove `[[reviewers]]`, tune `max_rounds`, and pick the
-`composer`. Each reviewer declares how its CLI is invoked and where its
-structured output is read from (`claude_json`, `last_message_file`, or
-`stdout_json`), so new CLIs can be added without code changes.
+Everything lives in `reviewr.toml`. Add/remove `[[reviewers]]`, tune
+`[consensus]`, and pick the `[composer]`. New CLIs can be added without code
+changes — a reviewer just declares how its CLI is invoked and how its output is
+read back.
+
+Per-reviewer fields:
+
+| Field | Meaning |
+| --- | --- |
+| `name` | Reviewer id (used by `[composer]` and in artifacts). |
+| `command` | Argv to launch the CLI headlessly. |
+| `prompt_via` | `"stdin"` (default) or `"arg"` — how the prompt is delivered. |
+| `result_from` | Where to read structured output: `claude_json` (parse a Claude `--output-format json` envelope), `last_message_file` (read the file written via `last_message_arg`, e.g. codex `-o`), or `stdout_json` (scan stdout). |
+| `schema_arg` | Flag to pass the JSON Schema, e.g. `--json-schema` (claude) or `--output-schema` (codex). Omit to rely on the prompt + tolerant parsing. |
+| `schema_as` | `"inline"` passes the schema JSON as the flag value (claude); `"file"` (default) passes a path (codex). |
+| `last_message_arg` | Flag the CLI uses to write its final message to a file (codex `-o`). Required for `result_from = "last_message_file"`. |
+| `timeout` | Seconds per reviewer per round. |
+
+`[consensus]`: `max_rounds` (cap on debate rounds) and `drop_rejected` (stop
+carrying findings the panel votes down). `[composer]`: `reviewer` names who
+edits the final `REVIEW.md`; omit it for a deterministic, no-AI render.
+
+The schema handed to the CLIs is generated strict (every object gets
+`additionalProperties: false` and all keys `required`) so it satisfies OpenAI /
+Codex structured-output rules.
 
 ## Layout
 
