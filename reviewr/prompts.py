@@ -21,6 +21,11 @@ _env.filters["tojson_pretty"] = lambda v: json.dumps(v, indent=2)
 
 
 def render_review(pr: PRContext) -> str:
+    # Re-review framing when we have a prior review to compare against.
+    if pr.prior_findings is not None:
+        return _env.get_template("rereview.j2").render(
+            pr=pr, prior_findings=pr.prior_findings, delta=pr.delta_diff
+        )
     return _env.get_template("review.j2").render(pr=pr)
 
 

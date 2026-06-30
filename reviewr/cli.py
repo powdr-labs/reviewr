@@ -33,6 +33,26 @@ def _pr_slug(pr) -> str | None:
     return None
 
 
+def _run_dir_for(pr, run_dir: str | None) -> Path:
+    if run_dir:
+        return Path(run_dir)
+    ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+    slug = _pr_slug(pr)
+    return Path.cwd() / ".reviewr" / "runs" / (f"{slug}-{ts}" if slug else ts)
+
+
+def _publish_run(rdir: Path, pr, event: str) -> None:
+    if not (pr.owner and pr.repo and pr.number):
+        click.echo("\n--publish skipped: this run isn't a GitHub PR review.")
+        return
+    click.echo("\nPublishing review to the PR…")
+    bundle = publish_mod.load_bundle(rdir, None)
+    diff_text = (rdir / "pr.diff").read_text()
+    payload = publish_mod.build_payload(bundle, diff_text, event)
+    result = publish_mod.post_review(bundle, payload)
+    click.echo(f"Posted review: {result.get('html_url', '(submitted)')}")
+
+
 @main.command()
 @click.argument("ref", required=False)
 @click.option("--config", "config_path", default="reviewr.toml",
@@ -51,12 +71,19 @@ def _pr_slug(pr) -> str | None:
 @click.option("--event", "publish_event",
               type=click.Choice(["COMMENT", "APPROVE", "REQUEST_CHANGES"]),
               default="COMMENT", help="Review event when --publish (default COMMENT).")
+@click.option("--fresh", is_flag=True,
+              help="Force a full review even if this PR was reviewed before "
+                   "(skip the automatic delta re-review).")
 def review(ref, config_path, repo_dir, clone_dir, base, head, diff_file, run_dir,
-           publish_after, publish_event):
+           publish_after, publish_event, fresh):
     """Review a PR or a local diff.
 
     REF may be a PR URL (https://github.com/owner/repo/pull/123), an
     owner/repo#123 spec, or a bare PR number (requires --repo).
+
+    If this PR was already reviewed and the author pushed more commits, the
+    same command automatically re-reviews only the new commits against the
+    previous findings (use --fresh to force a full review instead).
 
     \b
     Examples:
@@ -98,16 +125,35 @@ def review(ref, config_path, repo_dir, clone_dir, base, head, diff_file, run_dir
 
     pr = prepared.pr
 
-    # Artifacts live in cwd (stable), never inside an ephemeral worktree/clone.
-    if run_dir:
-        rdir = Path(run_dir)
-    else:
-        ts = datetime.now().strftime("%Y%m%d-%H%M%S")
-        slug = _pr_slug(pr)
-        name = f"{slug}-{ts}" if slug else ts
-        rdir = Path.cwd() / ".reviewr" / "runs" / name
+    # Auto re-review: if this PR was reviewed before, review only the commits
+    # added since, judged against the prior findings.
+    if not fresh and pr.owner and pr.repo and pr.number:
+        prior_dir = publish_mod.find_run_for_pr(
+            Path.cwd(), f"{pr.owner}/{pr.repo}#{pr.number}"
+        )
+        if prior_dir:
+            prior = publish_mod.load_bundle(prior_dir, None)
+            prior_sha = prior.pr.get("head_sha")
+            if prior_sha and pr.head_sha == prior_sha:
+                logger(f"Already reviewed this commit ({prior_sha[:8]}); nothing "
+                       "new. Use --fresh to review again anyway.")
+                prepared.cleanup()
+                return
+            pr.prior_findings = prior.findings
+            pr.delta_diff = (
+                pr_mod.delta_diff(pr.repo_dir, prior_sha, pr.head_sha, log=logger)
+                if prior_sha else None
+            )
+            span = (f"{prior_sha[:8]}..{(pr.head_sha or '')[:8]}"
+                    if prior_sha else "the full PR (prior commit unknown)")
+            logger(f"Prior review found ({prior_dir.name}); re-reviewing {span} "
+                   f"against {len(prior.findings)} prior finding(s).")
 
-    logger(f"Reviewing: {pr.short()}")
+    # Artifacts live in cwd (stable), never inside an ephemeral worktree/clone.
+    rdir = _run_dir_for(pr, run_dir)
+
+    mode = "Re-reviewing" if pr.prior_findings is not None else "Reviewing"
+    logger(f"{mode}: {pr.short()}")
     logger(f"Inspecting code in: {pr.repo_dir}")
     logger(f"Reviewers: {', '.join(r.name for r in config.reviewers)}")
     logger(f"Artifacts: {rdir}\n")
@@ -122,15 +168,7 @@ def review(ref, config_path, repo_dir, clone_dir, base, head, diff_file, run_dir
     click.echo(review_md)
 
     if publish_after:
-        if not (pr.owner and pr.repo and pr.number):
-            click.echo("\n--publish skipped: this run isn't a GitHub PR review.")
-        else:
-            click.echo("\nPublishing review to the PR…")
-            bundle = publish_mod.load_bundle(rdir, None)
-            diff_text = (rdir / "pr.diff").read_text()
-            payload = publish_mod.build_payload(bundle, diff_text, publish_event)
-            result = publish_mod.post_review(bundle, payload)
-            click.echo(f"Posted review: {result.get('html_url', '(submitted)')}")
+        _publish_run(rdir, pr, publish_event)
 
 
 @main.command()

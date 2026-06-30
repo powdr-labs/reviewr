@@ -40,6 +40,16 @@ Reviewers run against a working tree resolved by `reviewr/pr.py`:
 - PR URL, no `--repo` → a cached clone under `~/.cache/reviewr/clones`, checked
   out at the PR head.
 
+## Re-review
+
+`review` records the reviewed commit (`pr.head_sha`) in `review.json`. On a
+later `review` of the same PR, the CLI finds the prior run
+(`publish.find_run_for_pr`), and if the head advanced, sets `pr.prior_findings`
++ `pr.delta_diff` (`pr.delta_diff(...)` = `prior_head..new_head`).
+`prompts.render_review` then switches to `rereview.j2`. Same commit → no-op;
+`--fresh` forces a full review. Everything downstream (debate, compose, publish,
+fix) is unchanged — re-review just changes the round-0 framing and scope.
+
 ## Architecture (where things live)
 
 | Concern | File |

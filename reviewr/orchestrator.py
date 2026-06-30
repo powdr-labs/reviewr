@@ -142,6 +142,7 @@ class Orchestrator:
                 "head": self.pr.head,
                 "title": self.pr.title,
                 "url": self.pr.url,
+                "head_sha": self.pr.head_sha,
             },
             "reviewers": [r.name for r in self.config.reviewers],
             "composer": self.config.composer.reviewer,

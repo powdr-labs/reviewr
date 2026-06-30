@@ -34,6 +34,11 @@ class PRContext:
     owner: str | None = None
     repo: str | None = None
     url: str | None = None
+    head_sha: str | None = None  # the commit actually checked out / reviewed
+
+    # Re-review context (transient; not persisted as PR identity):
+    prior_findings: list[dict] | None = None  # findings from the previous review
+    delta_diff: str | None = None             # diff of the author's new commits
 
     def short(self) -> str:
         return f"{self.title} ({self.base}...{self.head})"
@@ -160,6 +165,7 @@ def prepare_from_local(
 
     log(f"Fetching PR #{number} head into a throwaway worktree…")
     _run(["git", "fetch", "origin", f"pull/{number}/head"], cwd=repo_dir)
+    pr.head_sha = _run(["git", "rev-parse", "FETCH_HEAD"], cwd=repo_dir).strip()
     wt = tempfile.mkdtemp(prefix=f"reviewr-pr{number}-")
     _run(["git", "worktree", "add", "--detach", wt, "FETCH_HEAD"], cwd=repo_dir)
     pr.repo_dir = wt
@@ -200,8 +206,33 @@ def prepare_from_clone(
 
     pr = _github_context(number, str(dest), gh_repo=pref.slug)
     pr.repo_dir = str(dest)
+    pr.head_sha = _run(["git", "rev-parse", "HEAD"], cwd=str(dest)).strip()
     # Keep the clone cached for next time.
     return PreparedPR(pr=pr, cleanup=_noop)
+
+
+def delta_diff(repo_dir: str, prior_sha: str, new_sha: str, log=print) -> str | None:
+    """Diff of the commits added between two PR-head commits (prior..new).
+
+    Returns None if the prior commit isn't available locally (e.g. the branch
+    was force-pushed), in which case the caller should re-review the full PR.
+    """
+    def have(sha: str) -> bool:
+        return subprocess.run(
+            ["git", "rev-parse", "--verify", "--quiet", f"{sha}^{{commit}}"],
+            cwd=repo_dir, capture_output=True, text=True,
+        ).returncode == 0
+
+    if not have(prior_sha):
+        subprocess.run(
+            ["git", "fetch", "origin", prior_sha],
+            cwd=repo_dir, capture_output=True, text=True,
+        )
+    if not have(prior_sha):
+        log(f"  prior commit {prior_sha[:8]} unavailable (force-push?); "
+            "re-reviewing the full PR")
+        return None
+    return _run(["git", "diff", prior_sha, new_sha], cwd=repo_dir)
 
 
 # --- non-PR modes --------------------------------------------------------

@@ -86,6 +86,15 @@ Add `--publish` to post the review to the PR as soon as the run finishes (same
 as running `reviewr publish` afterwards); `--event` sets the review event
 (default `COMMENT`). It's skipped for non-PR reviews (local diff / diff file).
 
+**Automatic re-review.** Run the *same* `reviewr review <pr>` again after the
+author pushes fixing commits. If a prior run exists for that PR, reviewr reviews
+only the commits added since (`prior_head..new_head`) against the previous
+findings — re-reporting what the new commits didn't fully fix and flagging
+anything they introduce. It chains across rounds of fixes. If the head is
+unchanged it does nothing; pass `--fresh` to force a full review instead. (Runs
+made before this feature didn't record their commit, so they fall back to
+re-reviewing the full PR.)
+
 A `REF` may be a PR URL, an `owner/repo#123` spec, or a bare number (bare
 number requires `--repo` to know which repo). Auto-clones are cached under
 `~/.cache/reviewr/clones` (override with `--clone-dir`), so re-runs just fetch.
