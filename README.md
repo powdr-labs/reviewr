@@ -8,8 +8,10 @@ findings list before a single composed `REVIEW.md` is produced.
 
 1. **Round 0 — independent review.** Every configured reviewer reviews the PR
    in parallel, running inside the repo so it can explore surrounding code, not
-   just the diff. Each emits a structured list of findings (JSON Schema –
-   enforced output).
+   just the diff. Findings are scoped to the PR's changes — surrounding code is
+   context for judging them, not a license to report unrelated pre-existing
+   issues. Each emits a structured list of findings (JSON Schema – enforced
+   output).
 2. **Rounds 1..N — blind debate.** All findings are merged into a shared list
    and shown back to every reviewer **with the source AI stripped** (and votes
    anonymized). Each reviewer votes `agree`/`dispute`/`unsure` on every finding
@@ -224,9 +226,11 @@ reviewr/
   backends.py      invoke a CLI reviewer, parse structured output
   state.py         shared anonymized findings, voting, convergence
   orchestrator.py  the round loop; writes run.log + review.json
+  prompts.py       render the prompt templates (picks rereview.j2 on delta runs)
   composer.py      final REVIEW.md
   publish.py       post a run to the PR as one line-anchored review
   fix.py           AIs propose/reconcile patches -> open a fix PR
   cli.py           `reviewr` entry point (review, publish, fix)
-prompts/           review.j2 / critique.j2 / compose.j2
+prompts/           review.j2 / rereview.j2 / critique.j2 / compose.j2
+                   fix.j2 / fix_critique.j2 / fix_decide.j2
 ```

@@ -65,7 +65,8 @@ def _publish_run(rdir: Path, pr, event: str) -> None:
 @click.option("--base", help="Local mode: base ref for `git diff base...head`.")
 @click.option("--head", default="HEAD", help="Local mode: head ref.")
 @click.option("--diff-file", help="Review a diff from a file instead of a PR.")
-@click.option("--run-dir", help="Artifact dir (default ./.reviewr/runs/<ts>).")
+@click.option("--run-dir",
+              help="Artifact dir (default ./.reviewr/runs/<owner>-<repo>-prN-<ts>).")
 @click.option("--publish", "publish_after", is_flag=True,
               help="Post the review to the PR as soon as the run finishes.")
 @click.option("--event", "publish_event",

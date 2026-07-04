@@ -26,10 +26,16 @@ reviewr review https://github.com/owner/repo/pull/123   # URL -> auto-clone
 reviewr review 123 --repo /path/to/repo                 # local checkout
 reviewr review --base main --head HEAD --repo /path     # local diff
 reviewr review --diff-file changes.diff --repo /path    # raw diff
+reviewr review <url> --publish                          # post the review when done
+reviewr publish --pr <url>                              # post a saved run later
+reviewr fix                                             # turn the latest run into a fix PR
 ```
 
-Artifacts land in `./.reviewr/runs/<timestamp>/` (per-round outputs, raw CLI
-logs, `state-*.json`, `REVIEW.md`).
+Artifacts land in `./.reviewr/runs/<owner>-<repo>-pr<N>-<timestamp>/`
+(timestamp-only when the run has no PR identity): per-round outputs, raw CLI
+logs, `state-*.json`, `REVIEW.md`, `run.log`, and `review.json` — the
+machine-readable bundle that `publish` and `fix` consume; both select a run by
+`--pr` via `publish.find_run_for_pr`.
 
 Reviewers run against a working tree resolved by `reviewr/pr.py`:
 - `--repo` + PR number → an ephemeral `git worktree` at the PR head (the user's
@@ -60,6 +66,7 @@ fix) is unchanged — re-review just changes the round-0 framing and scope.
 | Invoke a CLI reviewer, parse output | `reviewr/backends.py` |
 | Shared anonymized state, voting, convergence | `reviewr/state.py` |
 | The round loop; writes `run.log` + `review.json` | `reviewr/orchestrator.py` |
+| Render prompt templates (review vs re-review, fix) | `reviewr/prompts.py` |
 | Final `ComposedReview` (JSON) + `REVIEW.md` rendered from it | `reviewr/composer.py` |
 | Post a run to the PR as one line-anchored review | `reviewr/publish.py` |
 | Propose/reconcile patches, open a fix PR | `reviewr/fix.py` |
@@ -80,7 +87,10 @@ fix) is unchanged — re-review just changes the round-0 framing and scope.
   via `reviewr.toml` alone (command + `result_from` + schema/last-message
   flags), without code changes. Preserve that.
 - **Reviewers run inside the target repo** so they can explore real code, not
-  just the diff. Don't reduce them to diff-only.
+  just the diff. Don't reduce them to diff-only. At the same time, **findings
+  are scoped to the PR's changes** (enforced in `review.j2`/`critique.j2`):
+  exploration is for judging the diff in context, not for reporting unrelated
+  pre-existing issues. Keep both halves.
 - **JSON is the source of truth for the final review.** The composer emits a
   structured `ComposedReview` (findings carry a `locations` list); `REVIEW.md`
   is rendered from it via `composer.render_markdown`, and `publish` anchors a
